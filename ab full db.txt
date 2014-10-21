@@ -1,0 +1,55 @@
+D:\>ab -c 100 -n 10000 http://127.0.0.1:12345/status
+This is ApacheBench, Version 2.3 <$Revision: 655654 $>
+Copyright 1996 Adam Twiss, Zeus Technology Ltd, http://www.zeustech.net/
+Licensed to The Apache Software Foundation, http://www.apache.org/
+
+Benchmarking 127.0.0.1 (be patient)
+Completed 1000 requests
+Completed 2000 requests
+Completed 3000 requests
+Completed 4000 requests
+Completed 5000 requests
+Completed 6000 requests
+Completed 7000 requests
+Completed 8000 requests
+Completed 9000 requests
+Completed 10000 requests
+Finished 10000 requests
+
+
+Server Software:
+Server Hostname:        127.0.0.1
+Server Port:            12345
+
+Document Path:          /status
+Document Length:        4043 bytes
+
+Concurrency Level:      100
+Time taken for tests:   4682.739 seconds
+Complete requests:      10000
+Failed requests:        0
+Write errors:           0
+Total transferred:      41440000 bytes
+HTML transferred:       40430000 bytes
+Requests per second:    2.14 [#/sec] (mean)
+Time per request:       46827.388 [ms] (mean)
+Time per request:       468.274 [ms] (mean, across all concurrent requests)
+Transfer rate:          8.64 [Kbytes/sec] received
+
+Connection Times (ms)
+              min  mean[+/-sd] median   max
+Connect:        0    0   2.0      0      55
+Processing:   836 46617 48006.4  30575  250875
+Waiting:      785 32420 36874.3  20163  249114
+Total:        836 46618 48006.4  30576  250875
+
+Percentage of the requests served within a certain time (ms)
+  50%  30576
+  66%  40045
+  75%  48647
+  80%  58799
+  90%  123185
+  95%  166265
+  98%  200088
+  99%  218710
+ 100%  250875 (longest request)
