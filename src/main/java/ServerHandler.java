@@ -53,6 +53,7 @@ public class ServerHandler extends ChannelInboundHandlerAdapter {
         ConnectionManager.closeResultSet(resultSet);
     }
 
+
     @Override
     public void channelRead(ChannelHandlerContext ctx, Object msg) throws URISyntaxException, SQLException {
         // Получение размера запроса
