@@ -8,7 +8,7 @@ import java.sql.*;
  */
 public class ConnectionManager {
 
-    private static BoneCP connectionPoll = null;
+    private static BoneCP connectionPool = null;
 
     public static void configureConnectionPool() {
         try {
@@ -19,10 +19,10 @@ public class ConnectionManager {
             config.setPassword("EMBT6BDc");
             config.setMaxConnectionsPerPartition(8);
             config.setPartitionCount(2);
-            connectionPoll = new BoneCP(config);
+            connectionPool = new BoneCP(config);
             System.err.println("Connection pool is initializing....");
-            System.err.println("Total connection: " + connectionPoll.getTotalCreatedConnections());
-            ConnectionManager.setConnectionPool(connectionPoll);
+            System.err.println("Total connection: " + connectionPool.getTotalCreatedConnections());
+            ConnectionManager.setConnectionPool(connectionPool);
         } catch (ClassNotFoundException e) {
             e.printStackTrace();
         } catch (SQLException e) {
@@ -87,11 +87,11 @@ public class ConnectionManager {
     }
 
     public static BoneCP getConnectionPool() {
-        return connectionPoll;
+        return connectionPool;
     }
 
     private static void setConnectionPool(BoneCP connectionPool) {
-        ConnectionManager.connectionPoll = connectionPool;
+        ConnectionManager.connectionPool = connectionPool;
     }
 
     private Connection getNewConnection() {
