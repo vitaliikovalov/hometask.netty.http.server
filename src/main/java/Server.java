@@ -14,6 +14,8 @@
  * under the License.
  */
 
+import com.jolbox.bonecp.BoneCP;
+import com.jolbox.bonecp.BoneCPConfig;
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelOption;
@@ -43,10 +45,14 @@ public final class Server {
         connection--;
     }
 
+    public static ConnectionManager connectionManager = new ConnectionManager();
+
+
     public static void main(String[] args) throws Exception {
         // Настройка сервера
         EventLoopGroup bossGroup = new NioEventLoopGroup(1);
         EventLoopGroup workerGroup = new NioEventLoopGroup();
+        ConnectionManager.configureConnectionPool();
         try {
             ServerBootstrap b = new ServerBootstrap();
             b.option(ChannelOption.SO_BACKLOG, 1024);

@@ -36,6 +36,7 @@ public class ServerHandler extends ChannelInboundHandlerAdapter {
 
     private Connection connection;
     private Statement statement;
+    private ResultSet resultSet;
     private int size;
     private long startTime;
     private long finishTime;
@@ -47,14 +48,9 @@ public class ServerHandler extends ChannelInboundHandlerAdapter {
         Server.removeConnection();
         ctx.flush();
         // Закрытие подключения к БД
-        try {
-            if (statement != null)
-                statement.close();
-            if (connection != null)
-                connection.close();
-        } catch (SQLException e) {
-            e.printStackTrace();
-        }
+        ConnectionManager.closeConnection(connection);
+        ConnectionManager.closeStatement(statement);
+        ConnectionManager.closeResultSet(resultSet);
     }
 
     @Override
@@ -71,7 +67,7 @@ public class ServerHandler extends ChannelInboundHandlerAdapter {
             // Получение URI из запроса
             URI uri = new URI(req.getUri());
             // Создание подключения к БД
-            connection = getNewConnection();
+            connection = ConnectionManager.getConnection();
             statement = connection.createStatement();
             //Добавление запроса к списку активных подключений
             Server.addConnection();
@@ -97,12 +93,9 @@ public class ServerHandler extends ChannelInboundHandlerAdapter {
         // Удаление запроса из количества активных подключений
         Server.removeConnection();
         // Звкрытие подключения к БД
-        try {
-            statement.close();
-            connection.close();
-        } catch (SQLException e) {
-            e.printStackTrace();
-        }
+        ConnectionManager.closeConnection(connection);
+        ConnectionManager.closeStatement(statement);
+        ConnectionManager.closeResultSet(resultSet);
         ctx.close();
     }
 
@@ -125,7 +118,12 @@ public class ServerHandler extends ChannelInboundHandlerAdapter {
         // Врямя завершения формирования ответа
         finishTime = System.currentTimeMillis();
         // Скорость обработки запроса
-        speed = (int) ((response.content().readableBytes() + size) * 1000 / (finishTime - startTime));
+        try {
+            speed = (int) ((response.content().readableBytes() + size) * 1000 / (finishTime - startTime));
+        }
+        catch (ArithmeticException e) {
+            speed = 0;
+        }
         // Подготовка запросы записи в БД
         String sqlExecute = "INSERT INTO CONNECTION_DB (SOURCE_IP, URI, TIMESTAMPS, SEND_BYTES, RECEIVED_BYTES, SPEED) VALUES (\""
                 + ((InetSocketAddress) ctx.channel().remoteAddress()).getHostName()
@@ -168,7 +166,12 @@ public class ServerHandler extends ChannelInboundHandlerAdapter {
         // Время завершения обработки запроса
         finishTime = System.currentTimeMillis();
         // Скорость обработки запроса
-        speed = (int) ((response.content().readableBytes() + size) * 1000 / (finishTime - startTime));
+        try {
+            speed = (int) ((response.content().readableBytes() + size) * 1000 / (finishTime - startTime));
+        }
+        catch (ArithmeticException e) {
+            speed = 0;
+        }
         // Создание запроса к БД
         String sqlExecute = "INSERT INTO CONNECTION_DB (SOURCE_IP, URI, TIMESTAMPS, SEND_BYTES, RECEIVED_BYTES, SPEED) VALUES (\""
                 + ((InetSocketAddress) ctx.channel().remoteAddress()).getHostName()
@@ -195,7 +198,6 @@ public class ServerHandler extends ChannelInboundHandlerAdapter {
     // Метод создания страницы статистики. Формирует и отправляет статистику
     public void renderStatus(ChannelHandlerContext ctx, URI uri, Statement statement) {
         StringBuilder status = new StringBuilder();
-        ResultSet resultSet;
         // Определение количество запросов в БД
         String sqlExecute = "SELECT COUNT(*) FROM CONNECTION_DB";
         try {
@@ -292,7 +294,12 @@ public class ServerHandler extends ChannelInboundHandlerAdapter {
         // Определение время окончания обработки запроса
         finishTime = System.currentTimeMillis();
         // Определение скорости обработки запроса
-        speed = (int) ((response.content().readableBytes() + size) * 1000 / (finishTime - startTime));
+        try {
+            speed = (int) ((response.content().readableBytes() + size) * 1000 / (finishTime - startTime));
+        }
+        catch (ArithmeticException e) {
+            speed = 0;
+        }
         // Создание запроса добавления в БД
         sqlExecute = "INSERT INTO CONNECTION_DB (SOURCE_IP, URI, TIMESTAMPS, SEND_BYTES, RECEIVED_BYTES, SPEED) VALUES (\""
                 + ((InetSocketAddress) ctx.channel().remoteAddress()).getHostName()
@@ -320,7 +327,12 @@ public class ServerHandler extends ChannelInboundHandlerAdapter {
     public void unsupportedParameter(ChannelHandlerContext ctx, URI uri, Statement statement) {
         FullHttpResponse response = new DefaultFullHttpResponse(HTTP_1_1, BAD_REQUEST);
         finishTime = System.currentTimeMillis();
-        speed = (int) ((response.content().readableBytes() + size) / (finishTime - startTime)) * 1000;
+        try {
+            speed = (int) ((response.content().readableBytes() + size) / (finishTime - startTime)) * 1000;
+        }
+        catch (ArithmeticException e) {
+            speed = 0;
+        }
         String sqlExecute = "INSERT INTO CONNECTION_DB (SOURCE_IP, URI, TIMESTAMPS, SEND_BYTES, RECEIVED_BYTES, SPEED) VALUES (\""
                 + ((InetSocketAddress) ctx.channel().remoteAddress()).getHostName()
                 + "\", \""
