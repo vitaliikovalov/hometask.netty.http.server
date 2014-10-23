@@ -4,6 +4,9 @@ hometask.netty.http.server
 
 Особенности имплементации:
 
+Запрос на создание БД:
+CREATE TABLE CONNECTION_DB(SOURCE_IP VARCHAR(64), URI VARCHAR(64), TIMESTAMPS BIGINT(60), SEND_BYTES INT(5), RECEIVED_BYTES INT(5), SPEED INT(5));
+
 При запросе на http://localhost:12345/hello сервер через 10 секунд рендерит  страницу с надписью «Hello World»
 
 При запросе на http://localhost:12345/redirect?url=<url> происходит переадресация на указанный url
