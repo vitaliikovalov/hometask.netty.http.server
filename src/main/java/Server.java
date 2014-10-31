@@ -45,13 +45,10 @@ public final class Server {
         connection--;
     }
 
-    public static ConnectionManager connectionManager = new ConnectionManager();
-
-
     public static void main(String[] args) throws Exception {
         // Настройка сервера
         EventLoopGroup bossGroup = new NioEventLoopGroup(1);
-        EventLoopGroup workerGroup = new NioEventLoopGroup();
+        EventLoopGroup workerGroup = new NioEventLoopGroup(8);
         ConnectionManager.configureConnectionPool();
         try {
             ServerBootstrap b = new ServerBootstrap();

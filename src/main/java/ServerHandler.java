@@ -56,6 +56,7 @@ public class ServerHandler extends ChannelInboundHandlerAdapter {
 
     @Override
     public void channelRead(ChannelHandlerContext ctx, Object msg) throws URISyntaxException, SQLException {
+
         // Получение размера запроса
         if (msg instanceof Integer) {
             size = (Integer) msg;
@@ -74,7 +75,7 @@ public class ServerHandler extends ChannelInboundHandlerAdapter {
             Server.addConnection();
             // Обработка запроса /hello.
             if (uri.toString().equalsIgnoreCase("/hello")) {
-                renderHelloWorld(ctx, uri, statement, msg);
+                renderHelloWorld(ctx, uri, statement);
             // Обработка запроса /redirect.
             } else if (((uri.toString()).length() > 13) && (uri.toString()).substring(0, 14).equalsIgnoreCase("/redirect?url=")) {
                 redirect(ctx, uri, statement);
@@ -101,13 +102,13 @@ public class ServerHandler extends ChannelInboundHandlerAdapter {
     }
 
     // Метод создания страницы Hello world. Отправляет ответ в виде Hello world
-    public void renderHelloWorld(ChannelHandlerContext ctx, URI uri, Statement statement, Object msg) {
+    public void renderHelloWorld(ChannelHandlerContext ctx, URI uri, Statement statement) {
         // Ждет 10 секунд
-        try {
-            Thread.sleep(10000);
-        } catch (InterruptedException e) {
-            e.printStackTrace();
-        }
+//        try {
+//            Thread.sleep(0);
+//        } catch (InterruptedException e) {
+//            e.printStackTrace();
+//        }
         // Формирование ответа
         FullHttpResponse response = new DefaultFullHttpResponse(HTTP_1_1, OK,
                 Unpooled.copiedBuffer("Hello world",
@@ -116,29 +117,18 @@ public class ServerHandler extends ChannelInboundHandlerAdapter {
                 response.content().readableBytes());
         response.headers().set(CONTENT_TYPE, "text/plain; charset=UTF-8");
         response.headers().set(CONNECTION, CLOSE);
-        // Врямя завершения формирования ответа
-        finishTime = System.currentTimeMillis();
         // Скорость обработки запроса
-        try {
-            speed = (int) ((response.content().readableBytes() + size) * 1000 / (finishTime - startTime));
-        }
-        catch (ArithmeticException e) {
-            speed = 0;
-        }
+        speed = getSpeed(response.content().readableBytes());
+        ActiveConnection activeConnection = new ActiveConnection(
+                ((InetSocketAddress) ctx.channel().remoteAddress()),
+                uri,
+                System.currentTimeMillis(),
+                response.content().readableBytes(),
+                size,
+                speed
+        );
         // Подготовка запросы записи в БД
-        String sqlExecute = "INSERT INTO CONNECTION_DB (SOURCE_IP, URI, TIMESTAMPS, SEND_BYTES, RECEIVED_BYTES, SPEED) VALUES (\""
-                + ((InetSocketAddress) ctx.channel().remoteAddress()).getHostName()
-                + "\", \""
-                + uri
-                + "\", "
-                + "NOW()"
-                + ", \""
-                + response.content().readableBytes()
-                + "\", \""
-                + size
-                + "\", \""
-                + speed
-                + "\")";
+        String sqlExecute = activeConnection.getSQLExecute();
         ctx.write(response).addListener(ChannelFutureListener.CLOSE);
         // Запись в БД
         try {
@@ -164,29 +154,18 @@ public class ServerHandler extends ChannelInboundHandlerAdapter {
         // Формирование ответа
         FullHttpResponse response = new DefaultFullHttpResponse(HTTP_1_1, MOVED_PERMANENTLY);
         response.headers().set(LOCATION, redirectUri);
-        // Время завершения обработки запроса
-        finishTime = System.currentTimeMillis();
         // Скорость обработки запроса
-        try {
-            speed = (int) ((response.content().readableBytes() + size) * 1000 / (finishTime - startTime));
-        }
-        catch (ArithmeticException e) {
-            speed = 0;
-        }
-        // Создание запроса к БД
-        String sqlExecute = "INSERT INTO CONNECTION_DB (SOURCE_IP, URI, TIMESTAMPS, SEND_BYTES, RECEIVED_BYTES, SPEED) VALUES (\""
-                + ((InetSocketAddress) ctx.channel().remoteAddress()).getHostName()
-                + "\", \""
-                + uri
-                + "\", "
-                + "NOW()"
-                + ", \""
-                + response.content().readableBytes()
-                + "\", \""
-                + size
-                + "\", \""
-                + speed
-                + "\")";
+        speed = getSpeed(response.content().readableBytes());
+        ActiveConnection activeConnection = new ActiveConnection(
+                ((InetSocketAddress) ctx.channel().remoteAddress()),
+                uri,
+                System.currentTimeMillis(),
+                response.content().readableBytes(),
+                size,
+                speed
+        );
+        // Подготовка запросы записи в БД
+        String sqlExecute = activeConnection.getSQLExecute();
         ctx.write(response).addListener(ChannelFutureListener.CLOSE);
         // Запись в БД
         try {
@@ -292,29 +271,18 @@ public class ServerHandler extends ChannelInboundHandlerAdapter {
                 response.content().readableBytes());
         response.headers().set(CONTENT_TYPE, "text/plain; charset=UTF-8");
         response.headers().set(CONNECTION, CLOSE);
-        // Определение время окончания обработки запроса
-        finishTime = System.currentTimeMillis();
-        // Определение скорости обработки запроса
-        try {
-            speed = (int) ((response.content().readableBytes() + size) * 1000 / (finishTime - startTime));
-        }
-        catch (ArithmeticException e) {
-            speed = 0;
-        }
-        // Создание запроса добавления в БД
-        sqlExecute = "INSERT INTO CONNECTION_DB (SOURCE_IP, URI, TIMESTAMPS, SEND_BYTES, RECEIVED_BYTES, SPEED) VALUES (\""
-                + ((InetSocketAddress) ctx.channel().remoteAddress()).getHostName()
-                + "\", \""
-                + uri
-                + "\", "
-                + "NOW()"
-                + ", \""
-                + response.content().readableBytes()
-                + "\", \""
-                + size
-                + "\", \""
-                + speed
-                + "\")";
+// Скорость обработки запроса
+        speed = getSpeed(response.content().readableBytes());
+        ActiveConnection activeConnection = new ActiveConnection(
+                ((InetSocketAddress) ctx.channel().remoteAddress()),
+                uri,
+                System.currentTimeMillis(),
+                response.content().readableBytes(),
+                size,
+                speed
+        );
+        // Подготовка запросы записи в БД
+        sqlExecute = activeConnection.getSQLExecute();
         // Добавление в БД
         try {
             statement.execute(sqlExecute);
@@ -327,26 +295,18 @@ public class ServerHandler extends ChannelInboundHandlerAdapter {
     // Метод обработки других запросов. Отправляет ответ в виде пустой страницы
     public void unsupportedParameter(ChannelHandlerContext ctx, URI uri, Statement statement) {
         FullHttpResponse response = new DefaultFullHttpResponse(HTTP_1_1, BAD_REQUEST);
-        finishTime = System.currentTimeMillis();
-        try {
-            speed = (int) ((response.content().readableBytes() + size) / (finishTime - startTime)) * 1000;
-        }
-        catch (ArithmeticException e) {
-            speed = 0;
-        }
-        String sqlExecute = "INSERT INTO CONNECTION_DB (SOURCE_IP, URI, TIMESTAMPS, SEND_BYTES, RECEIVED_BYTES, SPEED) VALUES (\""
-                + ((InetSocketAddress) ctx.channel().remoteAddress()).getHostName()
-                + "\", \""
-                + uri
-                + "\", "
-                + "NOW()"
-                + ", \""
-                + response.content().readableBytes()
-                + "\", \""
-                + size
-                + "\", \""
-                + speed
-                + "\")";
+        // Скорость обработки запроса
+        speed = getSpeed(response.content().readableBytes());
+        ActiveConnection activeConnection = new ActiveConnection(
+                ((InetSocketAddress) ctx.channel().remoteAddress()),
+                uri,
+                System.currentTimeMillis(),
+                response.content().readableBytes(),
+                size,
+                speed
+        );
+        // Подготовка запросы записи в БД
+        String sqlExecute = activeConnection.getSQLExecute();
         try {
             statement.execute(sqlExecute);
         } catch (SQLException e) {
@@ -355,19 +315,16 @@ public class ServerHandler extends ChannelInboundHandlerAdapter {
         ctx.write(response).addListener(ChannelFutureListener.CLOSE);
     }
 
-    // Метод создает новое соединение с базой данных
-    private Connection getNewConnection() {
-        Connection connection = null;
+    public int getSpeed(int sendBytes) {
+        int speed;
+        finishTime = System.currentTimeMillis();
         try {
-            Class.forName("com.mysql.jdbc.Driver");
-            connection = DriverManager.getConnection("jdbc:mysql://localhost:3307/server_db", "root", "EMBT6BDc");
-        } catch (ClassNotFoundException e) {
-            e.printStackTrace();
-        } catch (SQLException e) {
-            e.printStackTrace();
-            System.out.println("Error connection with database.");
+            speed = (int) ((sendBytes + size) * 1000 / (finishTime - startTime));
         }
-        return connection;
+        catch (ArithmeticException e) {
+            speed = (sendBytes + size) * 1000;
+        }
+        return speed;
     }
 
 }
