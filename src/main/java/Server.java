@@ -30,20 +30,6 @@ public final class Server {
 
     // Номер порта, на котором работает сервер.
     static final int PORT = 12345;
-    // Количество открытых соединений.
-    private static volatile int connection = 0;
-    // Метод возвращает количество открытых соеденений.
-    public static int getConnection() {
-        return connection;
-    }
-    // Метод добавляет открытое соединение.
-    public static synchronized void addConnection() {
-        connection++;
-    }
-    // Метод удаляет открытое соеденение.
-    public static synchronized void removeConnection() {
-        connection--;
-    }
 
     public static void main(String[] args) throws Exception {
         // Настройка сервера
@@ -60,6 +46,7 @@ public final class Server {
 
             Channel ch = b.bind(PORT).sync().channel();
             System.err.println("Open your web browser and navigate to http://127.0.0.1:" + PORT + '/');
+            new StatisticsCollector();
             ch.closeFuture().sync();
         } finally {
             bossGroup.shutdownGracefully();

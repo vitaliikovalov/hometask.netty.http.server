@@ -45,7 +45,7 @@ public class ServerHandler extends ChannelInboundHandlerAdapter {
     @Override
     public void channelReadComplete(ChannelHandlerContext ctx) {
         // Удаление запроса из количества активных подключений
-        Server.removeConnection();
+        StatisticsCollector.removeConnection();
         ctx.flush();
         // Закрытие подключения к БД
         ConnectionManager.closeConnection(connection);
@@ -72,7 +72,7 @@ public class ServerHandler extends ChannelInboundHandlerAdapter {
             connection = ConnectionManager.getConnection();
             statement = connection.createStatement();
             //Добавление запроса к списку активных подключений
-            Server.addConnection();
+            StatisticsCollector.addConnection();
             // Обработка запроса /hello.
             if (uri.toString().equalsIgnoreCase("/hello")) {
                 renderHelloWorld(ctx, uri, statement);
@@ -93,7 +93,7 @@ public class ServerHandler extends ChannelInboundHandlerAdapter {
     public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
         cause.printStackTrace();
         // Удаление запроса из количества активных подключений
-        Server.removeConnection();
+        StatisticsCollector.removeConnection();
         // Звкрытие подключения к БД
         ConnectionManager.closeConnection(connection);
         ConnectionManager.closeStatement(statement);
@@ -133,6 +133,7 @@ public class ServerHandler extends ChannelInboundHandlerAdapter {
         // Запись в БД
         try {
             statement.execute(sqlExecute);
+            StatisticsCollector.addCountConnection();
         } catch (SQLException e) {
             e.printStackTrace();
         }
@@ -170,6 +171,7 @@ public class ServerHandler extends ChannelInboundHandlerAdapter {
         // Запись в БД
         try {
             statement.execute(sqlExecute);
+            StatisticsCollector.addCountConnection();
         } catch (SQLException e) {
             e.printStackTrace();
         }
@@ -179,19 +181,10 @@ public class ServerHandler extends ChannelInboundHandlerAdapter {
     public void renderStatus(ChannelHandlerContext ctx, URI uri, Statement statement) {
         StringBuilder status = new StringBuilder();
         // Определение количество запросов в БД
-        String sqlExecute = "SELECT COUNT(*) FROM CONNECTION_DB";
-        try {
-            resultSet = statement.executeQuery(sqlExecute);
-            if (resultSet.next()) {
-                status.append("Общее количество запросов: ");
-                status.append(resultSet.getInt(1)).append("\n");
-            }
-            status.append("\n");
-        } catch (SQLException e) {
-            e.printStackTrace();
-        }
+        status.append("Общее количество запросов: ");
+        status.append(StatisticsCollector.getCountConnection()).append("\n");
         // Определение количества уникальных запросов
-        sqlExecute = "SELECT SOURCE_IP, COUNT(DISTINCT URI) FROM CONNECTION_DB GROUP BY SOURCE_IP";
+        String sqlExecute = "SELECT SOURCE_IP, COUNT(DISTINCT URI) FROM CONNECTION_DB GROUP BY SOURCE_IP";
         try {
             resultSet = statement.executeQuery(sqlExecute);
             status.append("Количество уникальных запросов (по одному на IP):\n");
@@ -261,7 +254,7 @@ public class ServerHandler extends ChannelInboundHandlerAdapter {
         // Определение количества активных соединений
         status.append("\n")
                 .append("Количество соединений, открытых в данный момент: ")
-                .append(Server.getConnection())
+                .append(StatisticsCollector.getConnection())
                 .append("\n");
         // Создание ответа
         FullHttpResponse response = new DefaultFullHttpResponse(HTTP_1_1, OK,
@@ -285,6 +278,7 @@ public class ServerHandler extends ChannelInboundHandlerAdapter {
         sqlExecute = activeConnection.getSQLExecute();
         // Добавление в БД
         try {
+            StatisticsCollector.addCountConnection();
             statement.execute(sqlExecute);
         } catch (SQLException e) {
             e.printStackTrace();
