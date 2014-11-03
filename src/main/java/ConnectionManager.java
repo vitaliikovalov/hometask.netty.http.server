@@ -17,7 +17,7 @@ public class ConnectionManager {
             config.setJdbcUrl("jdbc:mysql://localhost:3307/server_db");
             config.setUsername("root");
             config.setPassword("EMBT6BDc");
-            config.setMaxConnectionsPerPartition(8);
+            config.setMaxConnectionsPerPartition(4);
             config.setPartitionCount(2);
             connectionPool = new BoneCP(config);
             System.err.println("Connection pool is initializing....");

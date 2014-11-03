@@ -20,12 +20,13 @@ import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandlerAdapter;
 import io.netty.handler.codec.http.*;
 
-import java.net.InetSocketAddress;
-import java.net.URI;
-import java.net.URISyntaxException;
+import java.net.*;
 import java.nio.charset.Charset;
 import java.sql.*;
+import java.text.SimpleDateFormat;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 import static io.netty.handler.codec.http.HttpHeaders.Names.*;
 import static io.netty.handler.codec.http.HttpHeaders.Values.CLOSE;
@@ -41,6 +42,7 @@ public class ServerHandler extends ChannelInboundHandlerAdapter {
     private long startTime;
     private long finishTime;
     private int speed;
+    private SimpleDateFormat format = new SimpleDateFormat("yyyy:MM:dd HH.mm.ss.SSS");
 
     @Override
     public void channelReadComplete(ChannelHandlerContext ctx) {
@@ -52,7 +54,6 @@ public class ServerHandler extends ChannelInboundHandlerAdapter {
         ConnectionManager.closeStatement(statement);
         ConnectionManager.closeResultSet(resultSet);
     }
-
 
     @Override
     public void channelRead(ChannelHandlerContext ctx, Object msg) throws URISyntaxException, SQLException {
@@ -119,14 +120,19 @@ public class ServerHandler extends ChannelInboundHandlerAdapter {
         response.headers().set(CONNECTION, CLOSE);
         // Скорость обработки запроса
         speed = getSpeed(response.content().readableBytes());
-        ActiveConnection activeConnection = new ActiveConnection(
-                ((InetSocketAddress) ctx.channel().remoteAddress()),
-                uri,
-                System.currentTimeMillis(),
-                response.content().readableBytes(),
-                size,
-                speed
-        );
+        ActiveConnection activeConnection = null;
+        try {
+            activeConnection = new ActiveConnection(
+                    InetAddress.getByName(((InetSocketAddress) (ctx.channel().remoteAddress())).getHostName()),
+                    uri,
+                    System.currentTimeMillis(),
+                    response.content().readableBytes(),
+                    size,
+                    speed
+            );
+        } catch (UnknownHostException e) {
+            e.printStackTrace();
+        }
         // Подготовка запросы записи в БД
         String sqlExecute = activeConnection.getSQLExecute();
         ctx.write(response).addListener(ChannelFutureListener.CLOSE);
@@ -134,6 +140,7 @@ public class ServerHandler extends ChannelInboundHandlerAdapter {
         try {
             statement.execute(sqlExecute);
             StatisticsCollector.addCountConnection();
+            StatisticsCollector.addToLast16Connections(activeConnection);
         } catch (SQLException e) {
             e.printStackTrace();
         }
@@ -144,7 +151,7 @@ public class ServerHandler extends ChannelInboundHandlerAdapter {
         // Формирование ссылки на переадресацию
         String[] redirectLink = uri.getQuery().split("=");
         URI redirectUri = null;
-        if (!redirectLink[1].substring(0, 7).equalsIgnoreCase("http://")) {
+        if (redirectLink[1].length() < 7 || !redirectLink[1].substring(0,7).equalsIgnoreCase("http://")) {
             redirectLink[1] = "http://" + redirectLink[1];
         }
         try {
@@ -152,19 +159,27 @@ public class ServerHandler extends ChannelInboundHandlerAdapter {
         } catch (URISyntaxException e) {
             System.err.println("bad uri");
         }
+        System.err.println(redirectUri);
+        System.err.println(uri);
+        System.err.println(redirectLink[0] + "=" + redirectLink[1]);
         // Формирование ответа
         FullHttpResponse response = new DefaultFullHttpResponse(HTTP_1_1, MOVED_PERMANENTLY);
         response.headers().set(LOCATION, redirectUri);
         // Скорость обработки запроса
         speed = getSpeed(response.content().readableBytes());
-        ActiveConnection activeConnection = new ActiveConnection(
-                ((InetSocketAddress) ctx.channel().remoteAddress()),
-                uri,
-                System.currentTimeMillis(),
-                response.content().readableBytes(),
-                size,
-                speed
-        );
+        ActiveConnection activeConnection = null;
+        try {
+            activeConnection = new ActiveConnection(
+                    InetAddress.getByName(((InetSocketAddress) (ctx.channel().remoteAddress())).getHostName()),
+                    uri,
+                    System.currentTimeMillis(),
+                    response.content().readableBytes(),
+                    size,
+                    speed
+            );
+        } catch (UnknownHostException e) {
+            e.printStackTrace();
+        }
         // Подготовка запросы записи в БД
         String sqlExecute = activeConnection.getSQLExecute();
         ctx.write(response).addListener(ChannelFutureListener.CLOSE);
@@ -172,6 +187,8 @@ public class ServerHandler extends ChannelInboundHandlerAdapter {
         try {
             statement.execute(sqlExecute);
             StatisticsCollector.addCountConnection();
+            StatisticsCollector.addToLast16Connections(activeConnection);
+            StatisticsCollector.checkRedirectRequest(activeConnection);
         } catch (SQLException e) {
             e.printStackTrace();
         }
@@ -183,73 +200,39 @@ public class ServerHandler extends ChannelInboundHandlerAdapter {
         // Определение количество запросов в БД
         status.append("Общее количество запросов: ");
         status.append(StatisticsCollector.getCountConnection()).append("\n");
-        // Определение количества уникальных запросов
-        String sqlExecute = "SELECT SOURCE_IP, COUNT(DISTINCT URI) FROM CONNECTION_DB GROUP BY SOURCE_IP";
-        try {
-            resultSet = statement.executeQuery(sqlExecute);
-            status.append("Количество уникальных запросов (по одному на IP):\n");
-            status.append(String.format("%-25s", "IP")).append("|");
-            status.append(String.format("%-10s", "Count")).append("\n");
-            while (resultSet.next()) {
-                status.append(String.format("%-25s", resultSet.getString(1))).append("|");
-                status.append(String.format("%-10s", resultSet.getString(2))).append("\n");
-            }
-
-        } catch (SQLException e) {
-            e.printStackTrace();
-        }
-        // Определение количества запросов на каждый адрес
-        sqlExecute = "SELECT SOURCE_IP, COUNT(*), MAX(TIMESTAMPS) FROM CONNECTION_DB GROUP BY SOURCE_IP";
-        try {
-            resultSet = statement.executeQuery(sqlExecute);
-            status.append("\n").append("Счетчик запросов на каждый IP:").append("\n");
-            status.append(String.format("%-25s", "IP")).append("|");
-            status.append(String.format("%-10s", "Count")).append("|");
-            status.append(String.format("%-25s", "Last time")).append("\n");
-            while (resultSet.next()) {
-                status.append(String.format("%-25s", resultSet.getString(1))).append("|");
-                status.append(String.format("%-10s", resultSet.getString(2))).append("|");
-                status.append(String.format("%-25s", resultSet.getString(3))).append("\n");
-            }
-            status.append("\n");
-        } catch (SQLException e) {
-            e.printStackTrace();
-        }
         // Определение количество уникальных переадресаций
-        sqlExecute = "SELECT URI, COUNT(*) FROM CONNECTION_DB WHERE URI LIKE \"%/redirect?url=%\" GROUP BY URI";
-        try {
-            resultSet = statement.executeQuery(sqlExecute);
-            status.append("Количество переадресаций по url'ам:").append("\n");
-            status.append(String.format("%-40s", "URI")).append("|");
-            status.append(String.format("%-10s", "Count")).append("\n");
-            while (resultSet.next()) {
-                status.append(String.format("%-40s", resultSet.getString(1).substring(14))).append("|");
-                status.append(String.format("%-10s", resultSet.getString(2))).append("\n");
-            }
-        } catch (SQLException e) {
-            e.printStackTrace();
+        status.append("Количество переадресаций по url'ам: ");
+        status.append(StatisticsCollector.getCountUniqueRequest()).append("\n");
+        // Определение количества запросов на каждый адрес
+        status.append("\n").append("Счетчик запросов на каждый IP:").append("\n");
+        status.append(String.format("%-25s", "IP")).append("|");
+        status.append(String.format("%-10s", "Count")).append("|");
+        status.append(String.format("%-25s", "Last time")).append("\n");
+        for (Map.Entry<InetAddress, List<Long>> entry :StatisticsCollector.getRequestsPerAddress().entrySet()) {
+            status.append(String.format("%-25s", entry.getKey())).append("|");
+            status.append(String.format("%-10s", entry.getValue().get(0))).append("|");
+            status.append(String.format("%-25s", format.format(new Date(entry.getValue().get(1))))).append("\n");
         }
+        status.append("\n");
+
+
+        //Добавляет список переадресаций
+        for (Map.Entry<URI, Integer> map :StatisticsCollector.getRedirectedConnections().entrySet()) {
+            String[] tmp = map.getKey().getQuery().split("=");
+            status.append(String.format("%-40s", tmp[1])).append("|");
+            status.append(String.format("%-10s", map.getValue())).append("\n");
+        }
+
         // Добавляет список 16 последних обработанных соединений
-        sqlExecute = "SELECT * FROM CONNECTION_DB ORDER BY TIMESTAMPS DESC LIMIT 16";
-        try {
-            resultSet = statement.executeQuery(sqlExecute);
-            status.append("\n").append("16 последних обработанных соединений:").append("\n");
-            status.append(String.format("%-25s", "IP")).append("|");
-            status.append(String.format("%-40s", "URI")).append("|");
-            status.append(String.format("%-25s", "Timestamp")).append("|");
-            status.append(String.format("%-15s", "Sent bytes")).append("|");
-            status.append(String.format("%-15s", "Received bytes")).append("|");
-            status.append(String.format("%-10s", "Speed")).append("\n");
-            while (resultSet.next()) {
-                status.append(String.format("%-25s", resultSet.getString(1))).append("|");
-                status.append(String.format("%-40s", resultSet.getString(2))).append("|");
-                status.append(String.format("%-25s", resultSet.getString(3))).append("|");
-                status.append(String.format("%-15s", resultSet.getString(4))).append("|");
-                status.append(String.format("%-15s", resultSet.getString(5))).append("|");
-                status.append(String.format("%-10s", resultSet.getString(6))).append("\n");
-            }
-        } catch (SQLException e) {
-            e.printStackTrace();
+        status.append("\n").append("16 последних обработанных соединений:").append("\n");
+        status.append(String.format("%-25s", "IP")).append("|");
+        status.append(String.format("%-40s", "URI")).append("|");
+        status.append(String.format("%-25s", "Timestamp")).append("|");
+        status.append(String.format("%-15s", "Sent bytes")).append("|");
+        status.append(String.format("%-15s", "Received bytes")).append("|");
+        status.append(String.format("%-10s", "Speed")).append("\n");
+        for (ActiveConnection activeConnection :new ArrayList<ActiveConnection>(StatisticsCollector.getLast16Connections())) {
+            status.append(activeConnection);
         }
         // Определение количества активных соединений
         status.append("\n")
@@ -266,16 +249,21 @@ public class ServerHandler extends ChannelInboundHandlerAdapter {
         response.headers().set(CONNECTION, CLOSE);
 // Скорость обработки запроса
         speed = getSpeed(response.content().readableBytes());
-        ActiveConnection activeConnection = new ActiveConnection(
-                ((InetSocketAddress) ctx.channel().remoteAddress()),
-                uri,
-                System.currentTimeMillis(),
-                response.content().readableBytes(),
-                size,
-                speed
-        );
+        ActiveConnection activeConnection = null;
+        try {
+            activeConnection = new ActiveConnection(
+                    InetAddress.getByName(((InetSocketAddress) (ctx.channel().remoteAddress())).getHostName()),
+                    uri,
+                    System.currentTimeMillis(),
+                    response.content().readableBytes(),
+                    size,
+                    speed
+            );
+        } catch (UnknownHostException e) {
+            e.printStackTrace();
+        }
         // Подготовка запросы записи в БД
-        sqlExecute = activeConnection.getSQLExecute();
+        String sqlExecute = activeConnection.getSQLExecute();
         // Добавление в БД
         try {
             StatisticsCollector.addCountConnection();
@@ -283,6 +271,8 @@ public class ServerHandler extends ChannelInboundHandlerAdapter {
         } catch (SQLException e) {
             e.printStackTrace();
         }
+        StatisticsCollector.addToLast16Connections(activeConnection);
+        StatisticsCollector.addRequestsPerAddress(activeConnection);
         ctx.write(response).addListener(ChannelFutureListener.CLOSE);
     }
 
@@ -291,14 +281,19 @@ public class ServerHandler extends ChannelInboundHandlerAdapter {
         FullHttpResponse response = new DefaultFullHttpResponse(HTTP_1_1, BAD_REQUEST);
         // Скорость обработки запроса
         speed = getSpeed(response.content().readableBytes());
-        ActiveConnection activeConnection = new ActiveConnection(
-                ((InetSocketAddress) ctx.channel().remoteAddress()),
-                uri,
-                System.currentTimeMillis(),
-                response.content().readableBytes(),
-                size,
-                speed
-        );
+        ActiveConnection activeConnection = null;
+        try {
+            activeConnection = new ActiveConnection(
+                    InetAddress.getByName(((InetSocketAddress) (ctx.channel().remoteAddress())).getHostName()),
+                    uri,
+                    System.currentTimeMillis(),
+                    response.content().readableBytes(),
+                    size,
+                    speed
+            );
+        } catch (UnknownHostException e) {
+            e.printStackTrace();
+        }
         // Подготовка запросы записи в БД
         String sqlExecute = activeConnection.getSQLExecute();
         try {
