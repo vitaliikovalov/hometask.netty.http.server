@@ -140,7 +140,7 @@ public class ServerHandler extends ChannelInboundHandlerAdapter {
         try {
             statement.execute(sqlExecute);
             StatisticsCollector.addCountConnection();
-            StatisticsCollector.addToLast16Connections(activeConnection);
+            StatisticsCollector.addLast16Connections(activeConnection);
         } catch (SQLException e) {
             e.printStackTrace();
         }
@@ -187,8 +187,8 @@ public class ServerHandler extends ChannelInboundHandlerAdapter {
         try {
             statement.execute(sqlExecute);
             StatisticsCollector.addCountConnection();
-            StatisticsCollector.addToLast16Connections(activeConnection);
-            StatisticsCollector.checkRedirectRequest(activeConnection);
+            StatisticsCollector.addLast16Connections(activeConnection);
+            StatisticsCollector.addRedirectConnections(activeConnection);
         } catch (SQLException e) {
             e.printStackTrace();
         }
@@ -199,12 +199,12 @@ public class ServerHandler extends ChannelInboundHandlerAdapter {
         StringBuilder status = new StringBuilder();
         // Определение количество запросов в БД
         status.append("Общее количество запросов: ");
-        status.append(StatisticsCollector.getCountConnection()).append("\n");
-        // Определение количество уникальных переадресаций
-        status.append("Количество переадресаций по url'ам: ");
-        status.append(StatisticsCollector.getCountUniqueRequest()).append("\n");
+        status.append(StatisticsCollector.getCountConnection()).append("\n").append("\n");
+        // Определение количество уникальных запросов
+        status.append("Количество уникальных запросов: ");
+        status.append(StatisticsCollector.getUniqueRequest()).append("\n").append("\n");
         // Определение количества запросов на каждый адрес
-        status.append("\n").append("Счетчик запросов на каждый IP:").append("\n");
+        status.append("Счетчик запросов на каждый IP:").append("\n");
         status.append(String.format("%-25s", "IP")).append("|");
         status.append(String.format("%-10s", "Count")).append("|");
         status.append(String.format("%-25s", "Last time")).append("\n");
@@ -214,17 +214,21 @@ public class ServerHandler extends ChannelInboundHandlerAdapter {
             status.append(String.format("%-25s", format.format(new Date(entry.getValue().get(1))))).append("\n");
         }
         status.append("\n");
-
-
         //Добавляет список переадресаций
+        status.append("Количество переадресаций по url'ам: ").append("\n");
+        status.append(String.format("%-40s", "URL")).append("|");
+        status.append(String.format("%-10s", "Count")).append("\n");
         for (Map.Entry<URI, Integer> map :StatisticsCollector.getRedirectedConnections().entrySet()) {
             String[] tmp = map.getKey().getQuery().split("=");
             status.append(String.format("%-40s", tmp[1])).append("|");
             status.append(String.format("%-10s", map.getValue())).append("\n");
         }
-
+        status.append("\n");
+        // Определение количества активных соединений
+        status.append("Количество соединений, открытых в данный момент: ");
+        status.append(StatisticsCollector.getConnection()).append("\n").append("\n");
         // Добавляет список 16 последних обработанных соединений
-        status.append("\n").append("16 последних обработанных соединений:").append("\n");
+        status.append("16 последних обработанных соединений:").append("\n");
         status.append(String.format("%-25s", "IP")).append("|");
         status.append(String.format("%-40s", "URI")).append("|");
         status.append(String.format("%-25s", "Timestamp")).append("|");
@@ -234,11 +238,6 @@ public class ServerHandler extends ChannelInboundHandlerAdapter {
         for (ActiveConnection activeConnection :new ArrayList<ActiveConnection>(StatisticsCollector.getLast16Connections())) {
             status.append(activeConnection);
         }
-        // Определение количества активных соединений
-        status.append("\n")
-                .append("Количество соединений, открытых в данный момент: ")
-                .append(StatisticsCollector.getConnection())
-                .append("\n");
         // Создание ответа
         FullHttpResponse response = new DefaultFullHttpResponse(HTTP_1_1, OK,
                 Unpooled.copiedBuffer(status.toString(),
@@ -262,16 +261,17 @@ public class ServerHandler extends ChannelInboundHandlerAdapter {
         } catch (UnknownHostException e) {
             e.printStackTrace();
         }
+        StatisticsCollector.addActiveConnection(activeConnection);
+        StatisticsCollector.addCountConnection();
         // Подготовка запросы записи в БД
-        String sqlExecute = activeConnection.getSQLExecute();
+//        String sqlExecute = activeConnection.getSQLExecute();
         // Добавление в БД
-        try {
-            StatisticsCollector.addCountConnection();
-            statement.execute(sqlExecute);
-        } catch (SQLException e) {
-            e.printStackTrace();
-        }
-        StatisticsCollector.addToLast16Connections(activeConnection);
+//        try {
+//            statement.execute(sqlExecute);
+//        } catch (SQLException e) {
+//            e.printStackTrace();
+//        }
+        StatisticsCollector.addLast16Connections(activeConnection);
         StatisticsCollector.addRequestsPerAddress(activeConnection);
         ctx.write(response).addListener(ChannelFutureListener.CLOSE);
     }

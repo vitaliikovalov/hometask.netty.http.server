@@ -22,6 +22,7 @@ public class ActiveConnection {
         this.uri = uri;
     }
 
+
     public ActiveConnection(InetAddress ipSource, URI uri, long timestamps, int sendBytes, int receivedBytes, int speed) {
         this.ipSource = ipSource;
         this.uri = uri;

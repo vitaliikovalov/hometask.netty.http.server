@@ -4,6 +4,8 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.*;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.LinkedBlockingDeque;
 
 /**
  * Created by Cctv on 31.10.2014.
@@ -40,42 +42,12 @@ public class StatisticsCollector {
 
     private static volatile Set<ActiveConnection> uniqueRequest = Collections.synchronizedSet(new HashSet<ActiveConnection>());
 
-    private static volatile List<ActiveConnection> last16Connections = Collections.synchronizedList(new ArrayList<ActiveConnection>(17));
-
-    public static synchronized List<ActiveConnection> getLast16Connections() {
-        return last16Connections;
-    }
-
-    public static synchronized void addToLast16Connections(ActiveConnection activeConnection) {
-        last16Connections.add(activeConnection);
-        if (last16Connections.size() > 16) {
-            last16Connections.remove(0);
-        }
-    }
-
-    public static synchronized void checkUniqueRequest(ActiveConnection activeConnection) {
+    public static synchronized void addUniqueRequest(ActiveConnection activeConnection) {
         uniqueRequest.add(activeConnection);
     }
 
-    public static synchronized int getCountUniqueRequest() {
+    public static synchronized int getUniqueRequest() {
         return uniqueRequest.size();
-    }
-
-    private static volatile Map<URI, Integer> redirectedConnections = Collections.synchronizedMap(new HashMap<URI, Integer>());
-
-    public static void checkRedirectRequest(ActiveConnection activeConnection) {
-        if (redirectedConnections.containsKey(activeConnection.getUri())) {
-            Integer tmp = redirectedConnections.get(activeConnection.getUri());
-            tmp++;
-            redirectedConnections.put(activeConnection.getUri(), tmp);
-        }
-        else {
-            redirectedConnections.put(activeConnection.getUri(), 1);
-        }
-    }
-
-    public static Map<URI, Integer> getRedirectedConnections() {
-        return redirectedConnections;
     }
 
     private static Map<InetAddress, List<Long>> requestsPerAddress = Collections.synchronizedMap(new HashMap<InetAddress, List<Long>>());
@@ -97,7 +69,45 @@ public class StatisticsCollector {
         return requestsPerAddress;
     }
 
+    private static volatile Map<URI, Integer> redirectedConnections = Collections.synchronizedMap(new HashMap<URI, Integer>());
 
+    public static void addRedirectConnections(ActiveConnection activeConnection) {
+        if (redirectedConnections.containsKey(activeConnection.getUri())) {
+            Integer tmp = redirectedConnections.get(activeConnection.getUri());
+            tmp++;
+            redirectedConnections.put(activeConnection.getUri(), tmp);
+        }
+        else {
+            redirectedConnections.put(activeConnection.getUri(), 1);
+        }
+    }
+
+    public static Map<URI, Integer> getRedirectedConnections() {
+        return redirectedConnections;
+    }
+
+    private static volatile List<ActiveConnection> last16Connections = Collections.synchronizedList(new ArrayList<ActiveConnection>(17));
+
+    public static synchronized void addLast16Connections(ActiveConnection activeConnection) {
+        last16Connections.add(activeConnection);
+        if (last16Connections.size() > 16) {
+            last16Connections.remove(0);
+        }
+    }
+
+    public static synchronized List<ActiveConnection> getLast16Connections() {
+        return last16Connections;
+    }
+
+    static volatile BlockingQueue<ActiveConnection> activeConnections = new LinkedBlockingDeque<ActiveConnection>(10000);
+
+    public static synchronized void addActiveConnection(ActiveConnection activeConnection) {
+        try {
+            activeConnections.put(activeConnection);
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+    }
 
     static {
         Connection connection = ConnectionManager.getConnection();
@@ -142,7 +152,6 @@ public class StatisticsCollector {
                 requestsPerAddress.put(InetAddress.getByName(resultSet.getString(1)),
                         new ArrayList<Long>(Arrays.asList(new Long(resultSet.getString(2)), new Long(resultSet.getString(3)))));
             }
-            System.err.println(requestsPerAddress);
         } catch (SQLException e) {
             e.printStackTrace();
         } catch (UnknownHostException e) {
@@ -165,7 +174,7 @@ public class StatisticsCollector {
         try {
             resultSet = statement.executeQuery(sqlExecute);
             while (resultSet.next()) {
-                addToLast16Connections(new ActiveConnection((InetAddress.getByName(resultSet.getString(1))),
+                addLast16Connections(new ActiveConnection((InetAddress.getByName(resultSet.getString(1))),
                         new URI(resultSet.getString(2)),
                         resultSet.getLong(3),
                         resultSet.getInt(4),
@@ -180,6 +189,5 @@ public class StatisticsCollector {
             e.printStackTrace();
         }
     }
-
 
 }

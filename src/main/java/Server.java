@@ -36,6 +36,9 @@ public final class Server {
         EventLoopGroup bossGroup = new NioEventLoopGroup(1);
         EventLoopGroup workerGroup = new NioEventLoopGroup(8);
         ConnectionManager.configureConnectionPool();
+        for (int i = 0; i < 4; i++) {
+            new Thread(new Worker(ConnectionManager.getConnection())).start();
+        }
         try {
             ServerBootstrap b = new ServerBootstrap();
 //            b.option(ChannelOption.SO_BACKLOG, 1024);
